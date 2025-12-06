@@ -1,0 +1,91 @@
+<h1>Rails on local LLM: A Streaming Demo</h1>
+
+<label for="model">Model:</label><br />
+<select id="model">
+  <% if @models.present? %>
+    <% @models.each do |m| %>
+      <option value="<%= m %>"><%= m %></option>
+    <% end %>
+  <% else %>
+    <option value="">(no models found)</option>
+  <% end %>
+</select>
+
+<br /><br />
+
+<label for="prompt">Prompt:</label><br />
+<textarea id="prompt"
+          placeholder="Ask something..."
+          style="width:100%;height:120px;"></textarea><br />
+
+<button id="send">Send</button>
+<span id="status" style="margin-left: 10px;font-weight: bold"></span>
+
+<h3>Response (streaming):</h3>
+<pre id="output"
+     style="white-space:pre-wrap;background:#f5f5f5;padding:1rem;margin-top:1rem;"></pre>
+
+<script>
+  const promptEl = document.getElementById("prompt");
+  const outputEl = document.getElementById("output");
+  const sendBtn  = document.getElementById("send");
+  const modelEl  = document.getElementById("model");
+  const statusEl = document.getElementById("status");
+
+  let thinkingInterval = null;
+
+  function startThinking() {
+    let dots = 0;
+    statusEl.textContent = statusEl.textContent = "🤔 Thinking";
+    thinkingInterval = setInterval(() => {
+      dots = (dots + 1) % 4; // 0..3
+      statusEl.textContent = "🤔 Thinking" + ".".repeat(dots);
+    }, 400);
+  }
+
+  function stopThinking() {
+    if (thinkingInterval) {
+      clearInterval(thinkingInterval);
+      thinkingInterval = null;
+    }
+    statusEl.textContent = "";
+  }
+
+  sendBtn.addEventListener("click", () => {
+    const prompt = promptEl.value.trim();
+    const model  = modelEl.value;
+
+    if (!prompt) return;
+
+    outputEl.textContent = "";
+    sendBtn.disabled = true;
+    startThinking();
+
+    const params = new URLSearchParams();
+    params.set("prompt", prompt);
+    if (model) params.set("model", model);
+
+    const url = "<%= llm_stream_path %>?" + params.toString();
+    const es  = new EventSource(url);
+
+    // Default streaming messages
+    es.onmessage = (event) => {
+      outputEl.textContent += event.data;
+    };
+
+    // Stream finished
+    es.addEventListener("done", () => {
+      es.close();
+      sendBtn.disabled = false;
+      stopThinking();
+    });
+
+    // Stream error
+    es.addEventListener("error", (event) => {
+      console.error("SSE error", event);
+      es.close();
+      sendBtn.disabled = false;
+      stopThinking();
+    });
+  });
+</script>
