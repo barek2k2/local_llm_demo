@@ -1,24 +1,4 @@
-# README
+## 🎬 Live Demo
+![Rails local LLM Streaming](https://raw.githubusercontent.com/barek2k2/local_llm_demo/76a05e485bf92e0c31e922db6b9df6608086d1f8/app/assets/images/demo.gif)
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
-
-Things you may want to cover:
-
-* Ruby version
-
-* System dependencies
-
-* Configuration
-
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+#### Please See gem document at https://github.com/barek2k2/local_llm
