@@ -12,6 +12,8 @@
 </select>
 
 <br /><br />
+<input type="checkbox" id="enable_context" /> <label for="enable_context">Enable Context(Chat Mode)</label>
+<br /><br />
 
 <label for="prompt">Prompt:</label><br />
 <textarea id="prompt"
@@ -21,7 +23,7 @@
 <button id="send">Send</button>
 <span id="status" style="margin-left: 10px;font-weight: bold"></span>
 
-<h3>Response (streaming):</h3>
+<h3>Response (streaming via POST):</h3>
 <pre id="output"
      style="white-space:pre-wrap;background:#f5f5f5;padding:1rem;margin-top:1rem;"></pre>
 
@@ -31,14 +33,16 @@
   const sendBtn  = document.getElementById("send");
   const modelEl  = document.getElementById("model");
   const statusEl = document.getElementById("status");
+  const enableContextEl = document.getElementById("enable_context");
+  const conversations = [{ "role": "system", "content": "You are a helpful assistant." }]
 
   let thinkingInterval = null;
 
   function startThinking() {
     let dots = 0;
-    statusEl.textContent = statusEl.textContent = "🤔 Thinking";
+    statusEl.textContent = "🤔 Thinking";
     thinkingInterval = setInterval(() => {
-      dots = (dots + 1) % 4; // 0..3
+      dots = (dots + 1) % 4;
       statusEl.textContent = "🤔 Thinking" + ".".repeat(dots);
     }, 400);
   }
@@ -51,7 +55,7 @@
     statusEl.textContent = "";
   }
 
-  sendBtn.addEventListener("click", () => {
+  sendBtn.addEventListener("click", async () => {
     const prompt = promptEl.value.trim();
     const model  = modelEl.value;
 
@@ -60,32 +64,57 @@
     outputEl.textContent = "";
     sendBtn.disabled = true;
     startThinking();
+    conversations.push({ "role": "user", "content": prompt })
+    let response = null;
 
-    const params = new URLSearchParams();
-    params.set("prompt", prompt);
-    if (model) params.set("model", model);
+    try {
+      if(enableContextEl.checked){
+        response = await fetch("<%= llm_chatt_path %>", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": document.querySelector("meta[name='csrf-token']").content
+          },
+          body: JSON.stringify({
+            messages: JSON.stringify(conversations),
+            model: model
+          })
+        });
+      }
+      else{
+        response = await fetch("<%= llm_stream_path %>", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": document.querySelector("meta[name='csrf-token']").content
+          },
+          body: JSON.stringify({
+            prompt: prompt,
+            model: model
+          })
+        });
+      }
 
-    const url = "<%= llm_stream_path %>?" + params.toString();
-    const es  = new EventSource(url);
 
-    // Default streaming messages
-    es.onmessage = (event) => {
-      outputEl.textContent += event.data;
-    };
+      const reader  = response.body.getReader();
+      const decoder = new TextDecoder();
 
-    // Stream finished
-    es.addEventListener("done", () => {
-      es.close();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done){
+          conversations.push({ "role": "assistant", "content": outputEl.textContent });
+          break;
+        }
+
+        const chunk = decoder.decode(value);
+        outputEl.textContent += chunk;
+      }
+
+    } catch (err) {
+      console.error("Streaming POST error:", err);
+    } finally {
       sendBtn.disabled = false;
       stopThinking();
-    });
-
-    // Stream error
-    es.addEventListener("error", (event) => {
-      console.error("SSE error", event);
-      es.close();
-      sendBtn.disabled = false;
-      stopThinking();
-    });
+    }
   });
 </script>

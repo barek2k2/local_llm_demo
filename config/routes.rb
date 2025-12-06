@@ -14,6 +14,7 @@ Rails.application.routes.draw do
   # root "posts#index"
 
   get "llm",        to: "llm#index"
-  get "llm/stream", to: "llm#stream"  # SSE endpoint
+  post "llm/stream", to: "llm#stream"  # SSE endpoint
+  post "llm/chatt", to: "llm#chatt"  # SSE endpoint
 
 end

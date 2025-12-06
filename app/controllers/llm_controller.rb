@@ -19,7 +19,7 @@ class LlmController < ApplicationController
   end
 
   def stream
-    response.headers["Content-Type"]      = "text/event-stream"
+    response.headers["Content-Type"]      = "text/plain"   # or "text/event-stream", both fine for fetch
     response.headers["Cache-Control"]     = "no-cache"
     response.headers["X-Accel-Buffering"] = "no"
 
@@ -29,20 +29,57 @@ class LlmController < ApplicationController
     begin
       if model
         LocalLlm.ask(model, prompt, stream: true) do |chunk|
-          response.stream.write "data: #{chunk}\n\n"
+          response.stream.write chunk
         end
       else
-        LocalLlm.fast(prompt) do |chunk|
-          response.stream.write "data: #{chunk}\n\n"
+        LocalLlm.fast(prompt, stream: true) do |chunk|
+          response.stream.write chunk
         end
       end
-
-      response.stream.write "event: done\ndata: [DONE]\n\n"
     rescue => e
       Rails.logger.error("LlmController#stream error: #{e.class} - #{e.message}")
+      # Optional: send error text once
+      response.stream.write "[ERROR] #{e.message}"
+    ensure
+      response.stream.close
+    end
+  end
+
+
+  def chatt
+    response.headers["Content-Type"]      = "text/event-stream"
+    response.headers["Cache-Control"]     = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+
+    model_param = params[:model].presence
+    model       = model_param || LocalLlm.config.default_general_model
+
+    begin
+      raw = params[:messages].to_s
+      messages =
+        if raw.present?
+          JSON.parse(raw)
+        else
+          []
+        end
+
+      # `messages` is an array like:
+      # [
+      #   { "role" => "user", "content" => "Explain Ruby..." },
+      #   { "role" => "assistant", "content" => "Ruby is..." },
+      #   { "role" => "user", "content" => "When was it created?" }
+      # ]
+
+      LocalLlm.chat(model, messages, stream: true) do |chunk|
+        response.stream.write chunk
+      end
+
+    rescue => e
+      Rails.logger.error("LlmController#chatt error: #{e.class} - #{e.message}")
       response.stream.write "event: error\ndata: #{e.message}\n\n"
     ensure
       response.stream.close
     end
   end
+
 end
